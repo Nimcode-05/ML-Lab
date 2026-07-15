@@ -21,6 +21,7 @@ Tasks:
 ● Visualize the fitted line along with the data points.
 <br>
 _______________________________________________________________________________________________________________________________________
+<br>
 2. Implement polynomial regression on the Auto MPG dataset to predict miles per gallon 
 (MPG) based on engine displacement. Compare polynomial regression results with linear 
 regression. 
