@@ -1,0 +1,93 @@
+
+import pandas as pd
+import numpy as np
+
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, classification_report
+
+data = pd.read_csv("diabetes.csv")
+
+print("First 5 rows:")
+print(data.head())
+
+print("\nDataset Shape:", data.shape)
+
+
+
+columns = ['Glucose', 'BloodPressure', 'SkinThickness', 'Insulin', 'BMI']
+
+for col in columns:
+    data[col] = data[col].replace(0, np.nan)
+    data[col].fillna(data[col].median(), inplace=True)
+
+
+X = data.drop("Outcome", axis=1)
+y = data["Outcome"]
+
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y,
+    test_size=0.2,
+    random_state=42,
+    stratify=y
+)
+
+print("\n========== WITHOUT FEATURE SCALING ==========\n")
+
+model1 = LogisticRegression(max_iter=1000)
+
+model1.fit(X_train, y_train)
+
+y_pred1 = model1.predict(X_test)
+
+accuracy1 = accuracy_score(y_test, y_pred1)
+precision1 = precision_score(y_test, y_pred1)
+recall1 = recall_score(y_test, y_pred1)
+f11 = f1_score(y_test, y_pred1)
+
+print("Accuracy :", accuracy1)
+print("Precision:", precision1)
+print("Recall   :", recall1)
+print("F1 Score :", f11)
+
+print("\nClassification Report:")
+print(classification_report(y_test, y_pred1))
+
+
+print("\n========== WITH FEATURE SCALING ==========\n")
+
+scaler = StandardScaler()
+
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
+
+model2 = LogisticRegression(max_iter=1000)
+
+model2.fit(X_train_scaled, y_train)
+
+y_pred2 = model2.predict(X_test_scaled)
+
+accuracy2 = accuracy_score(y_test, y_pred2)
+precision2 = precision_score(y_test, y_pred2)
+recall2 = recall_score(y_test, y_pred2)
+f12 = f1_score(y_test, y_pred2)
+
+print("Accuracy :", accuracy2)
+print("Precision:", precision2)
+print("Recall   :", recall2)
+print("F1 Score :", f12)
+
+print("\nClassification Report:")
+print(classification_report(y_test, y_pred2))
+
+
+comparison = pd.DataFrame({
+    "Metric": ["Accuracy", "Precision", "Recall", "F1-Score"],
+    "Without Scaling": [accuracy1, precision1, recall1, f11],
+    "With Scaling": [accuracy2, precision2, recall2, f12]
+})
+
+print("\n========== PERFORMANCE COMPARISON ==========\n")
+print(comparison)
