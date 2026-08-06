@@ -4,7 +4,7 @@ This is a repo for ML lab experiments done in sem 5
 The syllabus for ML lab is given below:
 <br>
 <br>
-_____________________________________________________________________________________________________________________
+_______________________________________________________________________________________________
 <br>
 1. Implement linear regression with one variable on the California Housing dataset to predict 
 housing prices based on a single feature (e.g., the average number of rooms per dwelling). 
@@ -20,7 +20,7 @@ Tasks:
 <br>
 ● Visualize the fitted line along with the data points.
 <br>
-_______________________________________________________________________________________________________________________________________
+________________________________________________________________________________________________
 <br>
 2. Implement polynomial regression on the Auto MPG dataset to predict miles per gallon 
 (MPG) based on engine displacement. Compare polynomial regression results with linear 
@@ -37,4 +37,19 @@ such as MSE and R-squared.
 <br>
 ● Visualize the polynomial fit.
 <br>
-___________________________________________________________________________________________________________________________________________
+__________________________________________________________________________________________________________________________
+<br>
+Implement a logistic regression model to predict the likelihood of a disease using the Pima Indians Diabetes dataset. Compare the performance with and without feature scaling.
+<br>
+Tasks:
+<br>
+● Load and preprocess the Pima Indians Diabetes dataset.
+<br>
+● Implement logistic regression for binary classification.
+<br>
+● Evaluate model performance with and without feature scaling.
+<br>
+● Analyze metrics such as accuracy, precision, recall, and F1-score.
+<br>
+__________________________________________________________________________________________________________________________
+<br>
