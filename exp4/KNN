@@ -1,0 +1,339 @@
+
+# import necessary libraries
+import pandas as pd
+import numpy as np
+mport matplotlib.pyplot as plt
+import time
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+from sklearn.model_selection import train_test_split
+
+#load the dataset
+train_file = "fashion-mnist_train.csv.gz"
+test_file = "fashion-mnist_test.csv"
+train_df = pd.read_csv(train_file)
+test_df = pd.read_csv(test_file)
+print("Training data shape:", train_df.shape)
+print("Test data shape:", test_df.shape)
+
+
+y_train = train_df["label"].values
+y_test = test_df["label"].values
+
+
+X_train = train_df.drop("label", axis=1).values
+X_test = test_df.drop("label", axis=1).values
+
+
+X_train = X_train.astype("float32") / 255.0
+X_test = X_test.astype("float32") / 255.0
+
+
+#training
+TRAIN_SIZE = 20000
+TEST_SIZE = 4000
+
+X_train_small, _, y_train_small, _ = train_test_split(
+    X_train,
+    y_train,
+    train_size=TRAIN_SIZE,
+    stratify=y_train,
+    random_state=42
+)
+
+X_test_small, _, y_test_small, _ = train_test_split(
+    X_test,
+    y_test,
+    train_size=TEST_SIZE,
+    stratify=y_test,
+    random_state=42
+)
+
+class_names = [
+    "T-shirt/top",
+    "Trouser",
+    "Pullover",
+    "Dress",
+    "Coat",
+    "Sandal",
+    "Shirt",
+    "Sneaker",
+    "Bag",
+    "Ankle boot"
+]
+
+k_values = [1, 3, 5, 7, 9, 15, 21]
+
+results = []
+
+for k in k_values:
+
+    print("\n" + "=" * 50)
+    print("K =", k)
+    print("=" * 50)
+
+    # Create KNN model
+    knn = KNeighborsClassifier(
+        n_neighbors=k,
+        metric="euclidean",
+        n_jobs=-1
+    )
+
+    # Training time
+    start_train = time.perf_counter()
+
+    knn.fit(
+        X_train_small,
+        y_train_small
+    )
+
+    train_time = time.perf_counter() - start_train
+
+    # Prediction time
+    start_predict = time.perf_counter()
+
+    y_pred = knn.predict(X_test_small)
+
+    prediction_time = time.perf_counter() - start_predict
+
+    # Accuracy
+    accuracy = accuracy_score(
+        y_test_small,
+        y_pred
+    )
+
+    results.append({
+        "k": k,
+        "accuracy": accuracy,
+        "prediction_time": prediction_time,
+        "training_time": train_time
+    })
+
+    print("Accuracy:", round(accuracy, 4))
+    print("Training time:", round(train_time, 4), "seconds")
+    print("Prediction time:", round(prediction_time, 4), "seconds")
+
+results_df = pd.DataFrame(results)
+
+print("\n\nFINAL RESULTS")
+print("=" * 70)
+
+print(results_df)
+
+best_index = results_df["accuracy"].idxmax()
+
+best_k = results_df.loc[
+    best_index,
+    "k"
+]
+
+best_accuracy = results_df.loc[
+    best_index,
+    "accuracy"
+]
+
+print("\nBest k:", best_k)
+print("Best accuracy:", round(best_accuracy, 4))
+
+plt.figure(figsize=(8, 5))
+
+plt.plot(
+    results_df["k"],
+    results_df["accuracy"] * 100,
+    marker="o",
+    linewidth=2
+)
+
+plt.xlabel("Value of k")
+plt.ylabel("Accuracy (%)")
+plt.title("Effect of k on KNN Accuracy")
+plt.xticks(k_values)
+plt.grid(True)
+
+plt.show()
+
+plt.figure(figsize=(8, 5))
+
+plt.plot(
+    results_df["k"],
+    results_df["prediction_time"],
+    marker="o",
+    color="red",
+    linewidth=2
+)
+
+plt.xlabel("Value of k")
+plt.ylabel("Prediction Time (seconds)")
+plt.title("Effect of k on Computational Efficiency")
+plt.xticks(k_values)
+plt.grid(True)
+
+plt.show()
+
+final_knn = KNeighborsClassifier(
+    n_neighbors=int(best_k),
+    metric="euclidean",
+    n_jobs=-1
+)
+
+final_knn.fit(
+    X_train_small,
+    y_train_small
+)
+
+final_predictions = final_knn.predict(
+    X_test_small
+)
+
+final_accuracy = accuracy_score(
+    y_test_small,
+    final_predictions
+)
+
+print("\nFinal model accuracy:",
+      round(final_accuracy, 4))
+
+cm = confusion_matrix(
+    y_test_small,
+    final_predictions
+)
+
+plt.figure(figsize=(10, 8))
+
+plt.imshow(
+    cm,
+    cmap="Blues"
+)
+
+plt.colorbar()
+
+plt.xticks(
+    range(10),
+    class_names,
+    rotation=45,
+    ha="right"
+)
+
+plt.yticks(
+    range(10),
+    class_names
+)
+
+plt.xlabel("Predicted Label")
+plt.ylabel("Actual Label")
+
+plt.title(
+    f"Confusion Matrix - KNN (k={best_k})"
+)
+
+plt.tight_layout()
+
+plt.show()
+
+from PIL import Image
+import numpy as np
+import matplotlib.pyplot as plt
+
+# random saved image
+image_path = "photo.jpeg"   
+
+
+image = Image.open(image_path)
+
+image = image.convert("L") #greyscale
+
+image = image.resize((28, 28))
+
+
+image_array = np.array(image)
+
+
+image_array = image_array.astype("float32") / 255.0
+
+
+image_flattened = image_array.reshape(1, 784)
+
+prediction = final_knn.predict(image_flattened)
+
+
+class_names = [
+    "T-shirt/top",
+    "Trouser",
+    "Pullover",
+    "Dress",
+    "Coat",
+    "Sandal",
+    "Shirt",
+    "Sneaker",
+    "Bag",
+    "Ankle boot"
+]
+
+
+predicted_class = class_names[prediction[0]]
+
+
+
+
+print("\nPredicted class:", predicted_class)
+
+
+plt.figure(figsize=(5, 5))
+
+plt.imshow(
+    image_array,
+    cmap="gray"
+)
+
+plt.title(
+    f"Predicted: {predicted_class}"
+)
+
+plt.axis("off")
+
+plt.show()
+
+
+# Select a random image from the test dataset
+
+random_index = np.random.randint(0, len(X_test))
+
+random_image = X_test[random_index]
+actual_label = y_test[random_index]
+
+
+
+prediction = final_knn.predict(
+    random_image.reshape(1, -1)
+)[0]
+
+
+
+print("Random image index:", random_index)
+print("Actual class:", class_names[actual_label])
+print("Predicted class:", class_names[prediction])
+
+if actual_label == prediction:
+    print("Result: CORRECT")
+else:
+    print("Result: INCORRECT")
+
+
+
+plt.figure(figsize=(5, 5))
+
+plt.imshow(
+    random_image.reshape(28, 28),
+    cmap="gray"
+)
+
+plt.title(
+    f"Actual: {class_names[actual_label]}\n"
+    f"Predicted: {class_names[prediction]}"
+)
+
+plt.axis("off")
+plt.show()
+
+
+
