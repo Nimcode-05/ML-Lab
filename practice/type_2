@@ -1,0 +1,554 @@
+# voting based feature augmentation
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+from sklearn.datasets import load_breast_cancer
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.naive_bayes import GaussianNB
+from sklearn.linear_model import LogisticRegression
+
+from sklearn.metrics import (
+    accuracy_score,
+    confusion_matrix,
+    ConfusionMatrixDisplay
+)
+
+
+#dataset loading 
+data = load_breast_cancer()
+
+X = data.data
+y = data.target
+
+print("Dataset shape:", X.shape)
+print("Target names:", data.target_names)
+print("Target values:", np.unique(y))
+
+
+#train-test split
+X_train, X_test, y_train, y_test = train_test_split(
+    X,
+    y,
+    test_size=0.30,
+    stratify=y,
+    random_state=42
+)
+
+print("\nTraining samples:", X_train.shape[0])
+print("Testing samples :", X_test.shape[0])
+
+
+# scaling
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
+
+
+
+#TRAIN THE THREE CLASSIFIERS
+
+# Decision Tree
+dt = DecisionTreeClassifier(
+    random_state=42
+)
+
+# k-NN
+knn = KNeighborsClassifier(
+    n_neighbors=5
+)
+
+# Gaussian Naive Bayes
+gnb = GaussianNB()
+
+
+# Train
+dt.fit(X_train_scaled, y_train)
+knn.fit(X_train_scaled, y_train)
+gnb.fit(X_train_scaled, y_train)
+
+
+
+# TEST ACCURACY OF EACH MODEL
+
+dt_pred = dt.predict(X_test_scaled)
+knn_pred = knn.predict(X_test_scaled)
+gnb_pred = gnb.predict(X_test_scaled)
+
+dt_accuracy = accuracy_score(y_test, dt_pred)
+knn_accuracy = accuracy_score(y_test, knn_pred)
+gnb_accuracy = accuracy_score(y_test, gnb_pred)
+
+
+print("\nTEST ACCURACY OF BASE CLASSIFIERS")
+print(f"Decision Tree        : {dt_accuracy:.4f}")
+print(f"k-NN                 : {knn_accuracy:.4f}")
+print(f"Gaussian Naive Bayes : {gnb_accuracy:.4f}")
+
+
+
+
+#CREATE VOTING FEATURES
+# Get predictions on TRAINING DATA
+dt_train_pred = dt.predict(X_train_scaled)
+knn_train_pred = knn.predict(X_train_scaled)
+gnb_train_pred = gnb.predict(X_train_scaled)
+
+
+# Get predictions on TEST DATA
+dt_test_pred = dt.predict(X_test_scaled)
+knn_test_pred = knn.predict(X_test_scaled)
+gnb_test_pred = gnb.predict(X_test_scaled)
+
+
+
+# votes - Number of models predicting malignant.
+# Malignant = class 0
+
+
+# Therefore:
+# (prediction == 0) gives True/False.
+# True behaves like 1 and False like 0.
+# votes can therefore be:
+# 0, 1, 2, or 3
+
+votes_train = (
+    (dt_train_pred == 0).astype(int)
+    + (knn_train_pred == 0).astype(int)
+    + (gnb_train_pred == 0).astype(int)
+)
+
+votes_test = (
+    (dt_test_pred == 0).astype(int)
+    + (knn_test_pred == 0).astype(int)
+    + (gnb_test_pred == 0).astype(int)
+)
+
+
+
+# agree
+# agree = 1 if all three models give the same prediction
+# agree = 0 otherwise
+
+agree_train = (
+    (dt_train_pred == knn_train_pred)
+    &
+    (knn_train_pred == gnb_train_pred)
+).astype(int)
+
+agree_test = (
+    (dt_test_pred == knn_test_pred)
+    &
+    (knn_test_pred == gnb_test_pred)
+).astype(int)
+
+
+
+# APPEND VOTES AND AGREE TO ORIGINAL FEATURES
+# Original features = 30
+# New features:
+# votes = 1
+# agree = 1
+#
+# Total = 32 features
+
+X_train_augmented = np.column_stack([
+    X_train_scaled,
+    votes_train,
+    agree_train
+])
+
+X_test_augmented = np.column_stack([
+    X_test_scaled,
+    votes_test,
+    agree_test
+])
+
+
+print("FEATURE DIMENSIONS")
+
+print("Original number of features :", X_train_scaled.shape[1])
+print("Augmented number of features:", X_train_augmented.shape[1])
+
+
+
+# LOGISTIC REGRESSION ON ORIGINAL FEATURES
+
+lr_original = LogisticRegression(
+    max_iter=1000,
+    random_state=42
+)
+
+lr_original.fit(
+    X_train_scaled,
+    y_train
+)
+
+original_pred = lr_original.predict(
+    X_test_scaled
+)
+
+original_accuracy = accuracy_score(
+    y_test,
+    original_pred
+)
+
+original_cm = confusion_matrix(
+    y_test,
+    original_pred,
+    labels=[0, 1]
+)
+
+
+# LOGISTIC REGRESSION ON AUGMENTED FEATURES
+
+
+lr_augmented = LogisticRegression(
+    max_iter=1000,
+    random_state=42
+)
+
+lr_augmented.fit(
+    X_train_augmented,
+    y_train
+)
+
+augmented_pred = lr_augmented.predict(
+    X_test_augmented
+)
+
+augmented_accuracy = accuracy_score(
+    y_test,
+    augmented_pred
+)
+
+augmented_cm = confusion_matrix(
+    y_test,
+    augmented_pred,
+    labels=[0, 1]
+)
+
+
+
+#COMPARE LOGISTIC REGRESSION MODELS
+
+
+
+print("\nLOGISTIC REGRESSION COMPARISON")
+
+print(
+    f"Original features accuracy : "
+    f"{original_accuracy:.4f}"
+)
+
+print(
+    f"Augmented features accuracy: "
+    f"{augmented_accuracy:.4f}"
+)
+
+print("\nConfusion Matrix - Original Features")
+print(original_cm)
+
+print("\nConfusion Matrix - Augmented Features")
+print(augmented_cm)
+
+
+
+# DISPLAY CONFUSION MATRICES
+
+
+fig, ax = plt.subplots()
+
+ConfusionMatrixDisplay(
+    confusion_matrix=original_cm,
+    display_labels=["Malignant", "Benign"]
+).plot(ax=ax)
+
+ax.set_title(
+    "Logistic Regression - Original Features"
+)
+
+plt.show()
+
+
+fig, ax = plt.subplots()
+
+ConfusionMatrixDisplay(
+    confusion_matrix=augmented_cm,
+    display_labels=["Malignant", "Benign"]
+).plot(ax=ax)
+
+ax.set_title(
+    "Logistic Regression - Augmented Features"
+)
+
+plt.show()
+
+
+
+# 12. SELECT FINAL MODEL
+
+# We compare the two Logistic Regression models.
+#
+# The hospital cares strongly about malignant cases being missed.
+# Therefore:
+#
+# Primary consideration = lower FN
+# Secondary consideration = higher accuracy
+
+
+original_FN = original_cm[0, 1]
+original_FP = original_cm[1, 0]
+
+augmented_FN = augmented_cm[0, 1]
+augmented_FP = augmented_cm[1, 0]
+
+
+
+print("\nMODEL SELECTION")
+
+
+print("Original LR:")
+print("Accuracy:", original_accuracy)
+print("FN:", original_FN)
+print("FP:", original_FP)
+
+print("\nAugmented LR:")
+print("Accuracy:", augmented_accuracy)
+print("FN:", augmented_FN)
+print("FP:", augmented_FP)
+
+
+# ------------------------------------------------------------
+# Choose the model
+
+
+if original_FN < augmented_FN:
+    final_model = lr_original
+    final_X_test = X_test_scaled
+    final_model_name = "Logistic Regression - Original Features"
+
+elif augmented_FN < original_FN:
+    final_model = lr_augmented
+    final_X_test = X_test_augmented
+    final_model_name = "Logistic Regression - Augmented Features"
+
+else:
+    # If FN is equal, choose the model with higher accuracy
+    if original_accuracy >= augmented_accuracy:
+        final_model = lr_original
+        final_X_test = X_test_scaled
+        final_model_name = "Logistic Regression - Original Features"
+    else:
+        final_model = lr_augmented
+        final_X_test = X_test_augmented
+        final_model_name = "Logistic Regression - Augmented Features"
+
+
+print("\nFINAL MODEL:", final_model_name)
+
+
+# ============================================================
+# HOSPITAL SCREENING
+# ============================================================
+
+# Get probability of MALIGNANT.
+#[:, 0] gives P(malignant).
+
+malignant_probability = final_model.predict_proba(
+    final_X_test
+)[:, 0]
+
+
+#default threshold = 0.5
+# If P(malignant) >= 0.5:
+#     predict malignant -> biopsy
+#
+# Otherwise:
+#     predict benign
+
+default_pred = np.where(
+    malignant_probability >= 0.5,
+    0,      # malignant
+    1       # benign
+)
+
+default_cm = confusion_matrix(
+    y_test,
+    default_pred,
+    labels=[0, 1]
+)
+
+
+default_TP = default_cm[0, 0]
+default_FN = default_cm[0, 1]
+default_FP = default_cm[1, 0]
+default_TN = default_cm[1, 1]
+
+
+
+print("DEFAULT THRESHOLD = 0.5")
+
+
+print(default_cm)
+
+print("TP:", default_TP)
+print("FN:", default_FN)
+print("FP:", default_FP)
+print("TN:", default_TN)
+
+
+
+# FIND THRESHOLD WHERE FN <= 2
+
+
+# Hospital requirement:
+# FN must be at most 2.
+# We first find ALL thresholds satisfying FN <= 2.
+# Then, among those thresholds, we choose the one
+# with the LOWEST FP.
+
+
+thresholds = np.sort(
+    np.unique(malignant_probability)
+)
+
+valid_results = []
+
+for threshold in thresholds:
+
+    threshold_pred = np.where(
+        malignant_probability >= threshold,
+        0,      # malignant
+        1       # benign
+    )
+
+    cm = confusion_matrix(
+        y_test,
+        threshold_pred,
+        labels=[0, 1]
+    )
+
+    FN = cm[0, 1]
+    FP = cm[1, 0]
+
+    # Keep only thresholds satisfying
+    # the hospital's requirement
+    if FN <= 2:
+        valid_results.append(
+            (threshold, FN, FP)
+        )
+
+
+# Choose the threshold with minimum FP.
+# If there is a tie in FP, choose the one
+# with fewer FN.
+
+best_threshold, best_FN, best_FP = min(
+    valid_results,
+    key=lambda x: (x[2], x[1])
+)
+
+
+
+# CONFUSION MATRIX AT SELECTED THRESHOLD
+
+
+final_pred = np.where(
+    malignant_probability >= best_threshold,
+    0,
+    1
+)
+
+final_cm = confusion_matrix(
+    y_test,
+    final_pred,
+    labels=[0, 1]
+)
+
+final_TP = final_cm[0, 0]
+final_FN = final_cm[0, 1]
+final_FP = final_cm[1, 0]
+final_TN = final_cm[1, 1]
+
+
+
+# FINAL SCREENING COMPARISON
+
+
+
+print("FINAL HOSPITAL SCREENING ANALYSIS")
+
+print("Final model:", final_model_name)
+
+print(
+    f"\nDefault threshold  : 0.5000"
+)
+
+print(
+    f"Selected threshold : {best_threshold:.4f}"
+)
+
+print("\n--- Default threshold (0.5) ---")
+
+print("TP:", default_TP)
+print("FN:", default_FN)
+print("FP:", default_FP)
+print("TN:", default_TN)
+
+print("\n--- Selected threshold ---")
+
+print("TP:", final_TP)
+print("FN:", final_FN)
+print("FP:", final_FP)
+print("TN:", final_TN)
+
+print("\n--- Comparison ---")
+
+print(
+    "Malignant cases missed at 0.5     :",
+    default_FN
+)
+
+print(
+    "Malignant cases missed at selected:",
+    final_FN
+)
+
+print(
+    "\nBenign patients sent for biopsy at 0.5     :",
+    default_FP
+)
+
+print(
+    "Benign patients sent for biopsy at selected:",
+    final_FP
+)
+
+print(
+    "\nChange in unnecessary biopsies:",
+    final_FP - default_FP
+)
+
+
+
+# FINAL CONFUSION MATRIX
+
+
+fig, ax = plt.subplots()
+
+ConfusionMatrixDisplay(
+    confusion_matrix=final_cm,
+    display_labels=["Malignant", "Benign"]
+).plot(ax=ax)
+
+ax.set_title(
+    f"Final Model - Threshold = {best_threshold:.4f}"
+)
+
+plt.show()
