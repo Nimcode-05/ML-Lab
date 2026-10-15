@@ -1,0 +1,460 @@
+# Label-based Feature Augmentation
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+from sklearn.datasets import load_breast_cancer
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.naive_bayes import GaussianNB
+from sklearn.linear_model import LogisticRegression
+
+from sklearn.metrics import (
+    accuracy_score,
+    confusion_matrix,
+    ConfusionMatrixDisplay
+)
+
+data = load_breast_cancer()
+
+X = data.data
+y = data.target
+
+print("Dataset shape:", X.shape)
+print("Target names:", data.target_names)
+
+# 0 = malignant
+# 1 = benign
+
+#STRATIFIED 70:30 TRAIN-TEST SPLIT
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X,
+    y,
+    test_size=0.30,
+    stratify=y,
+    random_state=42
+)
+
+#standardisation
+
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
+
+#train the 3 classifiers
+
+# Decision Tree
+dt = DecisionTreeClassifier(
+    random_state=42
+)
+
+# k-Nearest Neighbours
+knn = KNeighborsClassifier(
+    n_neighbors=5
+)
+
+# Gaussian Naive Bayes
+nb = GaussianNB()
+
+
+# Train models
+dt.fit(X_train_scaled, y_train)
+knn.fit(X_train_scaled, y_train)
+nb.fit(X_train_scaled, y_train)
+
+# TEST ACCURACY OF THREE CLASSIFIERS
+
+
+dt_test_pred = dt.predict(X_test_scaled)
+knn_test_pred = knn.predict(X_test_scaled)
+nb_test_pred = nb.predict(X_test_scaled)
+
+dt_accuracy = accuracy_score(
+    y_test,
+    dt_test_pred
+)
+
+knn_accuracy = accuracy_score(
+    y_test,
+    knn_test_pred
+)
+
+nb_accuracy = accuracy_score(
+    y_test,
+    nb_test_pred
+)
+
+
+print("\nTEST ACCURACY OF BASE CLASSIFIERS")
+
+print(f"Decision Tree        : {dt_accuracy:.4f}")
+print(f"k-NN                 : {knn_accuracy:.4f}")
+print(f"Gaussian Naive Bayes : {nb_accuracy:.4f}")
+
+# CREATE PREDICTED-LABEL FEATURES
+
+
+# Predictions on TRAINING data
+dt_train_pred = dt.predict(X_train_scaled)
+knn_train_pred = knn.predict(X_train_scaled)
+nb_train_pred = nb.predict(X_train_scaled)
+
+
+# Predictions on TEST data
+dt_test_pred = dt.predict(X_test_scaled)
+knn_test_pred = knn.predict(X_test_scaled)
+nb_test_pred = nb.predict(X_test_scaled)
+
+
+
+#CREATE MAJORITY VOTE FEATURE
+
+# Since:
+# 0 = malignant
+# 1 = benign
+# We can use the mode of the three predictions.
+# If at least two models predict 0 -> majority_vote = 0
+# If at least two models predict 1 -> majority_vote = 1
+
+majority_vote_train = (
+    (dt_train_pred + knn_train_pred + nb_train_pred) >= 2
+).astype(int)
+
+majority_vote_test = (
+    (dt_test_pred + knn_test_pred + nb_test_pred) >= 2
+).astype(int)
+
+X_train_augmented = np.column_stack([
+    X_train_scaled,
+    dt_train_pred,
+    knn_train_pred,
+    nb_train_pred,
+    majority_vote_train
+])
+
+X_test_augmented = np.column_stack([
+    X_test_scaled,
+    dt_test_pred,
+    knn_test_pred,
+    nb_test_pred,
+    majority_vote_test
+])
+
+print(
+    "Original features :",
+    X_train_scaled.shape[1]
+)
+
+print(
+    "Augmented features:",
+    X_train_augmented.shape[1]
+)
+
+
+# to visualize augmented dataset
+feature_names = list(data.feature_names)
+
+augmented_feature_names = (
+    feature_names
+    + [
+        "dt_pred",
+        "knn_pred",
+        "nb_pred",
+        "majority_vote"
+    ]
+)
+
+augmented_df = pd.DataFrame(
+    X_train_augmented,
+    columns=augmented_feature_names
+)
+
+# Add actual target
+augmented_df["target"] = y_train
+
+print("AUGMENTED TRAINING DATASET")
+print("========================================")
+
+print(augmented_df)
+
+# LOGISTIC REGRESSION - ORIGINAL FEATURES
+
+
+lr_original = LogisticRegression(
+    max_iter=1000,
+    random_state=42
+)
+
+lr_original.fit(
+    X_train_scaled,
+    y_train
+)
+
+original_pred = lr_original.predict(
+    X_test_scaled
+)
+
+original_accuracy = accuracy_score(
+    y_test,
+    original_pred
+)
+
+original_cm = confusion_matrix(
+    y_test,
+    original_pred,
+    labels=[0, 1]
+)
+
+
+# LOGISTIC REGRESSION - AUGMENTED FEATURES
+
+
+lr_augmented = LogisticRegression(
+    max_iter=1000,
+    random_state=42
+)
+
+lr_augmented.fit(
+    X_train_augmented,
+    y_train
+)
+
+augmented_pred = lr_augmented.predict(
+    X_test_augmented
+)
+
+augmented_accuracy = accuracy_score(
+    y_test,
+    augmented_pred
+)
+
+augmented_cm = confusion_matrix(
+    y_test,
+    augmented_pred,
+    labels=[0, 1]
+)
+
+# 14. HOSPITAL SCREENING
+
+# IMPORTANT:
+# The question specifically says to use the
+# FINAL AUGMENTED MODEL.
+# Therefore, we use lr_augmented here.
+
+# Get probability of malignant class.
+# class 0 = malignant
+# class 1 = benign
+# [:, 0] gives P(malignant)
+
+malignant_probability = lr_augmented.predict_proba(
+    X_test_augmented
+)[:, 0]
+
+
+# DEFAULT THRESHOLD = 0.5
+
+# If P(malignant) >= 0.5:
+#       classify as malignant -> biopsy
+# Otherwise:
+#       classify as benign
+
+default_pred = np.where(
+    malignant_probability >= 0.5,
+    0,      # malignant
+    1       # benign
+)
+
+default_cm = confusion_matrix(
+    y_test,
+    default_pred,
+    labels=[0, 1]
+)
+
+
+default_TP = default_cm[0, 0]
+default_FN = default_cm[0, 1]
+default_FP = default_cm[1, 0]
+default_TN = default_cm[1, 1]
+
+
+
+print("DEFAULT THRESHOLD = 0.5")
+
+
+print(default_cm)
+
+print("Malignant correctly identified (TP):", default_TP)
+print("Malignant missed (FN):", default_FN)
+print("Benign sent for biopsy (FP):", default_FP)
+print("Benign correctly classified (TN):", default_TN)
+
+
+
+# FIND THRESHOLD WITH FN <= 2
+
+
+# Hospital requirement:
+# At most 2 malignant cases can be missed.
+# FN <= 2
+# We first find all thresholds satisfying this condition.
+
+thresholds = np.sort(
+    np.unique(malignant_probability)
+)
+
+valid_results = []
+
+for threshold in thresholds:
+
+    threshold_pred = np.where(
+        malignant_probability >= threshold,
+        0,      # malignant
+        1       # benign
+    )
+
+    cm = confusion_matrix(
+        y_test,
+        threshold_pred,
+        labels=[0, 1]
+    )
+
+    FN = cm[0, 1]
+    FP = cm[1, 0]
+
+    # Keep only thresholds satisfying
+    # the hospital requirement
+    if FN <= 2:
+
+        valid_results.append(
+            (threshold, FN, FP)
+        )
+
+# SELECT BEST THRESHOLD
+
+# Among thresholds where FN <= 2,
+# choose the threshold with minimum FP.
+# This means:
+# 1. Never allow more than 2 missed malignant cases.
+# 2. Among acceptable thresholds, minimize
+#    unnecessary biopsies.
+
+best_threshold, best_FN, best_FP = min(
+    valid_results,
+    key=lambda x: (x[2], x[1])
+)
+
+
+
+#CONFUSION MATRIX AT SELECTED THRESHOLD
+
+
+final_pred = np.where(
+    malignant_probability >= best_threshold,
+    0,
+    1
+)
+
+final_cm = confusion_matrix(
+    y_test,
+    final_pred,
+    labels=[0, 1]
+)
+
+final_TP = final_cm[0, 0]
+final_FN = final_cm[0, 1]
+final_FP = final_cm[1, 0]
+final_TN = final_cm[1, 1]
+
+
+# FINAL HOSPITAL SCREENING RESULTS
+
+
+
+print("FINAL HOSPITAL SCREENING ANALYSIS")
+print("========================================")
+
+print(
+    f"Selected threshold: {best_threshold:.4f}"
+)
+
+print("\n--- Default threshold = 0.5 ---")
+
+print(
+    "Malignant correctly identified (TP):",
+    default_TP
+)
+
+print(
+    "Malignant missed (FN):",
+    default_FN
+)
+
+print(
+    "Benign sent for biopsy (FP):",
+    default_FP
+)
+
+print(
+    "Benign correctly classified (TN):",
+    default_TN
+)
+
+
+print("\n--- Selected threshold ---")
+
+print(
+    "Malignant correctly identified (TP):",
+    final_TP
+)
+
+print(
+    "Malignant missed (FN):",
+    final_FN
+)
+
+print(
+    "Benign sent for biopsy (FP):",
+    final_FP
+)
+
+print(
+    "Benign correctly classified (TN):",
+    final_TN
+)
+
+
+print("\n--- Comparison ---")
+
+print(
+    "Change in malignant cases missed:",
+    final_FN - default_FN
+)
+
+print(
+    "Change in benign patients sent for biopsy:",
+    final_FP - default_FP
+)
+
+
+
+# DISPLAY FINAL CONFUSION MATRIX
+
+
+fig, ax = plt.subplots()
+
+ConfusionMatrixDisplay(
+    confusion_matrix=final_cm,
+    display_labels=["Malignant", "Benign"]
+).plot(ax=ax)
+
+ax.set_title(
+    f"Augmented LR - Threshold = {best_threshold:.4f}"
+)
+
+plt.show()
+
